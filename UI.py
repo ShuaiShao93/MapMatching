@@ -1,6 +1,5 @@
 from Tkinter import *
 from Map import *
-from Utils import map_dist, rand_color, line_segment_cross, DistancePointLine, is_line_segment_intersects_box, hsv2rgb
 import random
 
 class MapCanvas(Frame):
@@ -64,7 +63,7 @@ class MapCanvas(Frame):
 
 		self.traj_var_cb = {}
 		self.traj_mm_var_cb = {}
-
+	
 	def to_canvas_xy(self, lon, lat):
 		x = (lon - self.traj_map.min_longitude) * (self.CANVAS_WIDTH * self.scale) / (self.traj_map.max_longitude - self.traj_map.min_longitude)
 		y = self.CANVAS_HEIGHT * self.scale - (lat - self.traj_map.min_latitude) * (self.CANVAS_HEIGHT * self.scale)/ (self.traj_map.max_latitude - self.traj_map.min_latitude)
@@ -109,14 +108,27 @@ class MapCanvas(Frame):
 		self.canv.scale(ALL, cx, cy, 1.0/scale, 1.0/scale)
 		self.canv.config(scrollregion = self.canv.bbox(ALL))
 
+	def onLayerRedraw(self, tag, var):
+		self.canv.itemconfig(tag, state=MapCanvas.CHECK_BUTTON_STATES[var.get()])
+
+	def highlight_intersections(self):
+		for ist in self.traj_map.intersections:
+			cix, ciy = self.to_canvas_xy(ist[0], ist[1])
+			self.canv.create_oval(cix - 0.01, ciy - 0.01, cix + 0.01, ciy + 0.01, fill = "yellow")
+
 if __name__ == "__main__":
 	bjmap = Map()
 	filenames = ["bjmap_new/road"]
 	bjmap.load_roads(filenames)
 	bjmap.stat_map_info()	
 
+	bjmap.index_roads_on_grid()
+	bjmap.gen_road_graph()
+
 	master = Tk()
 	map_canvas = MapCanvas(bjmap, master)
 	map_canvas.draw_map()
+
+	map_canvas.highlight_intersections()
 
 	mainloop()		

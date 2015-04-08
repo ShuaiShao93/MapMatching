@@ -1,10 +1,9 @@
 import glob
 import math
 import shapefile
-import sys
 import time
 import psycopg2
-from Utils import map_dist, is_line_segment_intersects_box, line_segment_cross
+from Utils import map_dist, line_segment_cross
 
 #class TrajectoryPoint(object, timestamp, lon, lat):
 #	self.timestamp, self.lon, self.lat = timestamp, lon, lat
@@ -62,7 +61,7 @@ class Map(object):
 
 	def index_roads_on_grid(self):
 		self.grid_road_index = []
-		for row in range(0, self.TOTAL_GRID_ROWS):
+		for row in range(0, self.TOTAL_GRID_ROWS):   #index is one less than actual number of ROWS or COLS
 			self.grid_road_index.append([])
 			for col in range(0, self.TOTAL_GRID_COLS):
 				self.grid_road_index[row].append([])
@@ -109,10 +108,109 @@ class Map(object):
 		for row in range(0, self.TOTAL_GRID_ROWS):
 			for col in range(0, self.TOTAL_GRID_COLS):
 				self.gen_intersections_in_grid_cell(row, col)
-				print "gen_road_graph: row = %d, col = %d" % (row, col)
+				print "gen_road_graph: row = %d, col = %d" % (row+1, col+1)
 
 		print "Number of intersections: ", len(self.intersections)
 
+	def ShortestPath(self):
+		print "Connecting to database 'shortest_path'......"
+		conn_to = psycopg2.connect(host='localhost', port='5432', database='mapmatching', user='postgres', password='123456')
+		print "Connected."
+		cursor_to = conn_to.cursor()
+
+		cursor_to.execute("TRUNCATE TABLE shortest_path")
+		conn_to.commit()
+
+		self.num_sp = 0
+
+		for i in range(0, len(self.roads)):
+			for j in range(0, len(self.roads[i]) - 1):
+				#print "Processing the ShortestPath from %d-%d" % (i, j)
+				self.Dijkstra(i, j, self.roads, self.road_intersections, cursor_to)
+
+		conn_to.commit()
+		conn_to.close()
+
+	def Dijkstra(self, road_id, segment_id, roads, road_intersections, cursor_to):
+		INF = 999999
+
+		S = []
+		U = []
+
+		row1, col1 = self.lon_lat_to_grid_row_col(roads[road_id][segment_id][0], roads[road_id][segment_id][1])
+		row2, col2 = self.lon_lat_to_grid_row_col(roads[road_id][segment_id+1][0], roads[road_id][segment_id+1][1])
+		row_l = max(0, min(row1, row2) - 1)
+		row_h = min(self.TOTAL_GRID_ROWS - 1, max(row1, row2) + 1)  #index is one less than actual number, so the max index is TOTAL_GRID_ROWS -1
+		col_l = max(0, min(col1, col2) - 1)
+		col_h = min(self.TOTAL_GRID_COLS - 1, max(col1, col2) + 1)
+
+		search_range = []
+		for i in range(row_l, row_h + 1):
+			for j in range(col_l, col_h + 1):
+				search_range += self.grid_road_index[i][j]
+		search_range = set(search_range) # remove the duplicated elements
+
+		SegmentDistance = {}
+
+		for r in search_range:
+			SegmentDistance[r] = [INF, 0, 0] #First is distance from this segment, Second and Third are road_id and seg_id of the previous segment in shortest path
+			U.append(r)
+
+		SegmentDistance[(road_id, segment_id)] = [0, road_id, segment_id]
+
+		while len(U) != 0:
+			minimum = INF
+			for seg in U:
+				if SegmentDistance[seg][0] < minimum:
+					minimum = SegmentDistance[seg][0]
+					minidx = seg
+
+			if minimum == INF:
+				break
+
+			S.append(minidx)
+			U.remove(minidx)
+
+			lon1 = roads[minidx[0]][minidx[1]][0]
+			lat1 = roads[minidx[0]][minidx[1]][1]
+			lon2 = roads[minidx[0]][minidx[1] + 1][0]
+			lat2 = roads[minidx[0]][minidx[1] + 1][1]
+			length = map_dist(lon1, lat1, lon2, lat2)
+
+			if minidx[0] in road_intersections:     #renew all intersected segments
+				for ist in road_intersections[minidx[0]]:
+					if ist[2] == minidx[1]:
+						neighbor = ist[3]
+					else:
+						continue
+				
+					if not SegmentDistance.has_key(neighbor):
+						continue
+
+					if minimum + length < SegmentDistance[neighbor][0]:
+						SegmentDistance[neighbor][0] = minimum + length
+						SegmentDistance[neighbor][1:] = minidx
+
+			if minidx[1] > 0 and SegmentDistance.has_key((minidx[0], minidx[1] - 1)): #renew adjacent segment in the same road
+				if minimum + length < SegmentDistance[(minidx[0], minidx[1] - 1)][0]:
+					SegmentDistance[(minidx[0], minidx[1] - 1)][0] = minimum + length
+					SegmentDistance[(minidx[0], minidx[1] - 1)][1:] = minidx
+			
+			if minidx[1] < len(roads[minidx[0]]) - 2 and SegmentDistance.has_key((minidx[0], minidx[1] + 1)): #renew adjacent segment in the same road
+				if minimum + length < SegmentDistance[(minidx[0], minidx[1] + 1)][0]:
+					SegmentDistance[(minidx[0], minidx[1] + 1)][0] = minimum + length
+					SegmentDistance[(minidx[0], minidx[1] + 1)][1:] = minidx
+
+		l0 = map_dist(roads[road_id][segment_id][0], roads[road_id][segment_id][1], roads[road_id][segment_id+1][0], roads[road_id][segment_id+1][1])
+
+		for seg in S:
+			if SegmentDistance[seg][0] <=INF and SegmentDistance[seg][0] > 0:
+				distance = max(0, SegmentDistance[seg][0] - l0)
+				sql = "INSERT INTO shortest_path(src_roadid,src_segmentid,dst_roadid,dst_segmentid,prev_roadid,prev_segmentid,dist) values(%d,%d,%d,%d,%d,%d,%f)" % (road_id, segment_id, seg[0], seg[1], SegmentDistance[seg][1], SegmentDistance[seg][2], distance)
+				cursor_to.execute(sql)
+				self.num_sp += 1
+				print "Shortest Path %8d from %4d/%4d-%3d to %4d-%3d prev: %4d-%3d dist:%8.3f" % (self.num_sp, road_id, len(roads)-1, segment_id, seg[0], seg[1], SegmentDistance[seg][1], SegmentDistance[seg][2], distance)
+		
 						
 
 if __name__ == '__main__':
@@ -123,3 +221,5 @@ if __name__ == '__main__':
 
 	bjmap.index_roads_on_grid()
 	bjmap.gen_road_graph()	
+
+	bjmap.ShortestPath()
