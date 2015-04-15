@@ -153,7 +153,7 @@ class Map(object):
 		SegmentDistance = {}
 
 		for r in search_range:
-			SegmentDistance[r] = [INF, 0, 0] #First is distance from this segment, Second and Third are road_id and seg_id of the previous segment in shortest path
+			SegmentDistance[r] = [INF, -1, -1] #First is distance from this segment, Second and Third are road_id and seg_id of the previous segment in shortest path
 			U.append(r)
 
 		SegmentDistance[(road_id, segment_id)] = [0, road_id, segment_id]
