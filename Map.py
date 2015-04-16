@@ -219,7 +219,7 @@ if __name__ == '__main__':
 	bjmap.load_roads(filenames)
 	bjmap.stat_map_info()
 
-	bjmap.index_roads_on_grid()
-	bjmap.gen_road_graph()	
+	#bjmap.index_roads_on_grid()
+	#bjmap.gen_road_graph()	
 
-	bjmap.ShortestPath()
+	#bjmap.ShortestPath()
