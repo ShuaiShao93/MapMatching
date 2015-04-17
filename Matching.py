@@ -30,26 +30,27 @@ class Matching(object):
 		self.conn_sp.commit()
 		self.conn_sp.close()
 
-	def point_matching(self, traj_point, prev_traj_point, prev_seg, prev_candidate):
+	def point_matching(self, traj_point, prev_traj_point, prev_seg, prev_f_candidate, prev_prev_seg):
 		print "MapMatching at Time:", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(traj_point.timestamp))
 
 		candidate = self.obtain_candidate(traj_point)
 
 		print "Number of Candidates:" , len(candidate)		
 
-		road_id, seg_id = self.obtain_matching_segment(traj_point, prev_traj_point, prev_seg, candidate)
+		f_candidate = self.obtain_matching_segment(traj_point, prev_traj_point, prev_seg, candidate)
+		road_id = f_candidate[0][1]
+		seg_id = f_candidate[0][2]
 
 		#modify backwards
-		prev_road_id, prev_seg_id = -1, -1
-		if prev_traj_point != -1 and (road_id, seg_id) != (-1, -1): #if it is the first point or there is no matching result for current point, no need to modify backwards
+		mod_road_id, mod_seg_id = -1, -1
+		if prev_seg != (-1, -1) and prev_prev_seg != (-1, -1) and (road_id, seg_id) != (-1, -1): #if it is the first and second point or there is no matching result for current point, no need to modify backwards
 			cur_seg = (road_id, seg_id)
-			prev_road_id, prev_seg_id = self.obtain_matching_segment(prev_traj_point, traj_point, cur_seg, prev_candidate)
+			mod_road_id, mod_seg_id = self.modify_backwards(cur_seg, prev_f_candidate, prev_prev_seg)
 
-		if (prev_road_id, prev_seg_id) == (-1, -1):
-			return road_id, seg_id, prev_seg[0], prev_seg[1], candidate
+		if (mod_road_id, mod_seg_id) == (-1, -1):
+			return road_id, seg_id, prev_seg[0], prev_seg[1], f_candidate
 		else:	
-			return road_id, seg_id, prev_road_id, prev_seg_id, candidate
-			print "Modify Backwards Successfully!"
+			return road_id, seg_id, mod_road_id, mod_seg_id, f_candidate
 
 	def obtain_candidate(self, traj_point):
 		traj_point.row, traj_point.col = self.traj_map.lon_lat_to_grid_row_col(traj_point.lon, traj_point.lat)
@@ -86,7 +87,6 @@ class Matching(object):
 
 	def obtain_matching_segment(self, traj_point, prev_traj_point, prev_seg, candidate):
 		f_tp = []
-		max_result = (0.0, -1, -1)
 		for (d, r, s) in candidate:
 			op = self.ObservationProbability(d)
 			if prev_traj_point == -1 or prev_seg == (-1,-1): #if it is the first point or previous point has no result, then ignore the topological probability
@@ -94,14 +94,22 @@ class Matching(object):
 			else:
 				tp = self.TopologicalProbability(r, s, traj_point, prev_traj_point, prev_seg)
 			result = op*tp
-			f_tp.append((result, op, tp))
-			if result > max_result[0]:
-				max_result = (result, r, s)
 
-		if max_result[0] == 0:
+			if result > 0:
+				flag = False
+				for idx in range(0, len(f_tp)):
+					if(result > f_tp[idx][0]):
+						f_tp.insert(idx, (result, r, s))
+						flag = True
+						break
+				if flag == False:
+					f_tp.append((result, r, s))
+
+		if not f_tp:
 			print "Warning!No Matched Segment!"
+			f_tp = [(0.0, -1, -1)]
 		
-		return max_result[1:]
+		return f_tp
 	
 	def ObservationProbability(self, d):
 		MV = 0 #mean value
@@ -147,7 +155,7 @@ class Matching(object):
 
 			w = w0 + lineMagnitude(prev_ix, prev_iy, latter_intersection_x, latter_intersection_y) + lineMagnitude(prev_intersection_x, prev_intersection_y, cur_ix, cur_iy) #obtain the length of shortest path
 
-		avg_spd = (prev_traj_point.spd + traj_point.spd) / 2.0
+		avg_spd = (prev_traj_point.spd + traj_point.spd) / 2.0 * 1000 
 		t = (traj_point.timestamp - prev_traj_point.timestamp) / 60.0 / 60.0
 		dist = avg_spd * t #the actual distance of vehicle moving
 
@@ -157,6 +165,19 @@ class Matching(object):
 		tp = 1 - abs(w - dist) / dist
 
 		return tp
+
+	def modify_backwards(self, cur_seg, prev_f_candidate, prev_prev_seg):
+		if cur_seg == prev_prev_seg:
+			return -1, -1
+		sp = [cur_seg]
+		tar = cur_seg
+		while tar != prev_prev_seg:
+			tar = self.obtain_shortest_path(prev_prev_seg[0], prev_prev_seg[1], tar[0], tar[1])[:2]
+			sp.append(tar)
+		
+		for (f, r, s) in prev_f_candidate:
+			if (r, s) in sp:
+				return r, s
 
 	def obtain_shortest_path(self, r1, s1, r2, s2):
 		sql = "SELECT prev_roadid, prev_segmentid, dist FROM shortest_path WHERE src_roadid = %d AND src_segmentid = %d AND dst_roadid = %d AND dst_segmentid = %d" % (r1, s1, r2, s2)

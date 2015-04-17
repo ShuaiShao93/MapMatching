@@ -129,7 +129,7 @@ class MapCanvas(Frame):
 		self.canv.create_oval(x-self.radius, y-self.radius, x+self.radius, y+self.radius, fill = "red", tag = "traj", state = self.CHECK_BUTTON_STATES[self.var_cb_traj.get()])
 		#self.canv.cerate_line()
 		r = search_range * self.RESOLUTION * self.scale
-		self.canv.create_oval(x-r, y-r, x+r, y+r, tag = "traj", state = self.CHECK_BUTTON_STATES[self.var_cb_traj.get()])
+		#self.canv.create_oval(x-r, y-r, x+r, y+r, tag = "traj", state = self.CHECK_BUTTON_STATES[self.var_cb_traj.get()])
 		
 	def draw_matching_traj(self, point, roadid, segid):
 		if (roadid, segid) == (-1, -1):
@@ -143,9 +143,21 @@ class MapCanvas(Frame):
 		d, ix, iy = DistancePointLine(x, y, x1, y1, x2, y2)
 		self.canv.create_oval(ix-self.radius, iy-self.radius, ix+self.radius, iy+self.radius, fill = "yellow", tag = "matching_traj", state = self.CHECK_BUTTON_STATES[self.var_cb_mm.get()])
 
+	def replace_matching_traj(self, point, seg):
+		if seg == (-1, -1):
+			return -1
+
+		lon1, lat1 = self.traj_map.roads[seg[0]][seg[1]]
+		lon2, lat2 = self.traj_map.roads[seg[0]][seg[1]+1]
+		lon, lat = point.lon, point.lat
+		x1, y1 = self.to_canvas_xy(lon1, lat1)
+		x2, y2 = self.to_canvas_xy(lon2, lat2)
+		x, y = self.to_canvas_xy(lon, lat)
+		d, ix, iy = DistancePointLine(x, y, x1, y1, x2, y2)
+		self.canv.create_oval(ix-self.radius, iy-self.radius, ix+self.radius, iy+self.radius, fill = "blue", tag = "matching_traj", state = self.CHECK_BUTTON_STATES[self.var_cb_mm.get()])	
+
 	def onCanvasMotion(self, event): #show the position of mouse on map
 		lon, lat = self.to_lon_lat(self.canv.canvasx(event.x), self.canv.canvasy(event.y))
-		lon, lat = self.canv.canvasx(event.x), self.canv.canvasy(event.y)
 		self.var_pos.set("(%4.4f, %4.4f), scale=%.2f" % (lon, lat, self.scale))
 
 	def onCanvasLeftDoubleClick(self, event):
@@ -156,7 +168,7 @@ class MapCanvas(Frame):
 		self.zoomOut(event.x, event.y)
 		self.onCanvasMotion(event) #refresh the footer
 
-	def zoomIn(self, x, y, scale = 1.2):
+	def zoomIn(self, x, y, scale = 1.4):
 		cx, cy = self.canv.canvasx(x), self.canv.canvasy(y)
 		self.clon, self.clat = self.to_lon_lat(cx, cy)
 		self.cx, self.cy = cx, cy
@@ -165,7 +177,7 @@ class MapCanvas(Frame):
 		self.canv.scale(ALL, self.cx, self.cy, scale, scale)
 		self.canv.config(scrollregion = self.canv.bbox(ALL))
 
-	def zoomOut(self, x, y, scale = 1.2):
+	def zoomOut(self, x, y, scale = 1.4):
 		cx, cy = self.canv.canvasx(x), self.canv.canvasy(y)
 		self.clon, self.clat = self.to_lon_lat(cx, cy)
 		self.cx, self.cy = cx, cy
@@ -203,25 +215,29 @@ if __name__ == "__main__":
 	i = 0
 	prev_point = -1
 	prev_seg = (-1, -1)
-	prev_candidate = []
+	prev_prev_seg = (-1, -1)
+	prev_f_candidate = []
 	for i in range(0, len(map_canvas.traj)):
+		print "Matching No.", i
 		point = map_canvas.get_point(i)
 		map_canvas.draw_traj(point, 20)
 
-		road_id, seg_id, prev_road_id, prev_seg_id, candidate= matching_module.point_matching(point, prev_point, prev_seg, prev_candidate)
+		master.update()
+
+		road_id, seg_id, prev_road_id, prev_seg_id, f_candidate = matching_module.point_matching(point, prev_point, prev_seg, prev_f_candidate, prev_prev_seg)
 
 		map_canvas.draw_matching_traj(point, road_id, seg_id)
 
-		if (prev_road_id, prev_seg_id) != prev_seg and prev_point != -1:
-			map_canvas.draw_matching_traj(prev_point, prev_road_id, prev_seg_id)
+		if (prev_road_id, prev_seg_id) != prev_seg and (prev_road_id, prev_seg_id) != (-1, -1):
+			map_canvas.replace_matching_traj(prev_point, prev_seg)
+			map_canvas.draw_matching_traj(prev_point, prev_road_id, prev_seg_id)	
 
 		prev_point = point
+		prev_prev_seg = prev_seg
 		prev_seg = (road_id, seg_id)
-		prev_candidate = candidate
+		prev_f_candidate = f_candidate
 		
-		for t in range(0, 5):
-			time.sleep(0.01)
-			master.update()
+		master.update()
 
 
 	#map_canvas.highlight_intersections()
