@@ -19,13 +19,14 @@ class MapCanvas(Frame):
 
 		self.scale = 1.0 #zoomin/zoomout
 
-		self.CANVAS_MIN_X, self.CANVAS_MIN_Y = self.to_canvas_xy(traj_map.min_longitude, traj_map.max_latitude)
-		self.CANVAS_MAX_X, self.CANVAS_MAX_Y = self.to_canvas_xy(traj_map.max_longitude, traj_map.min_latitude)
+		self.cx = self.CANVAS_WIDTH/2
+		self.cy = self.CANVAS_HEIGHT/2
+		self.clon = m_longitude
+		self.clat = m_latitude
+		#self.CANVAS_MIN_X, self.CANVAS_MIN_Y = self.to_canvas_xy(traj_map.min_longitude, traj_map.max_latitude)
+		#self.CANVAS_MAX_X, self.CANVAS_MAX_Y = self.to_canvas_xy(traj_map.max_longitude, traj_map.min_latitude)
 
-		self.GRID_INTERVAL = 500 * self.RESOLUTION
-
-		self.TOTAL_GRID_ROWS = int((self.CANVAS_MAX_Y - self.CANVAS_MIN_Y) / self.GRID_INTERVAL + 1)
-		self.TOTAL_GRID_COLS = int((self.CANVAS_MAX_X - self.CANVAS_MIN_X) / self.GRID_INTERVAL + 1)
+		self.radius = 0.1 #radius of the point drawed
 
 		Frame.__init__(self, parent)
 		self.pack(expand = YES, fill = BOTH)
@@ -68,11 +69,13 @@ class MapCanvas(Frame):
 		self.traj_var_cb = {}
 		self.traj_mm_var_cb = {}
 	
+	#the principle of zoom in/out is not to change the x,y of the point where you double clicked and the point is self.cx,cy
 	def to_canvas_xy(self, lon, lat):
-		x = (lon - self.traj_map.min_longitude) * (self.CANVAS_WIDTH * self.scale) / (self.traj_map.max_longitude - self.traj_map.min_longitude)
-		y = self.CANVAS_HEIGHT * self.scale - (lat - self.traj_map.min_latitude) * (self.CANVAS_HEIGHT * self.scale)/ (self.traj_map.max_latitude - self.traj_map.min_latitude)
+		x = self.cx + (lon - self.clon) * (self.CANVAS_WIDTH * self.scale) / (self.traj_map.max_longitude - self.traj_map.min_longitude)
+		y = self.cy - (lat - self.clat) * (self.CANVAS_HEIGHT * self.scale) / (self.traj_map.max_latitude - self. traj_map.min_latitude)
 		
 		return x, y
+
 	def to_canvas_xy_t(self, lon, lat):
 		x = (lon - self.traj_map.min_longitude) * (self.CANVAS_WIDTH) / (self.traj_map.max_longitude - self.traj_map.min_longitude)
 		y = self.CANVAS_HEIGHT - (lat - self.traj_map.min_latitude) * (self.CANVAS_HEIGHT)/ (self.traj_map.max_latitude - self.traj_map.min_latitude)
@@ -80,8 +83,8 @@ class MapCanvas(Frame):
 		return x, y
 
 	def to_lon_lat(self, x, y):
-		lon = x * (self.traj_map.max_longitude - self.traj_map.min_longitude) / (self.CANVAS_WIDTH * self.scale) + self.traj_map.min_longitude
-		lat = (self.CANVAS_HEIGHT * self.scale - y) * (self.traj_map.max_latitude - self.traj_map.min_latitude) / (self.CANVAS_HEIGHT * self.scale) + self.traj_map.min_latitude
+		lon = self.clon + (x - self.cx) * (self.traj_map.max_longitude - self.traj_map.min_longitude) / (self.CANVAS_WIDTH * self.scale)
+		lat = self.clat - (y - self.cy) * (self.traj_map.max_latitude - self.traj_map.min_latitude) / (self.CANVAS_HEIGHT * self.scale)
 
 		return lon, lat
 
@@ -121,11 +124,13 @@ class MapCanvas(Frame):
 		
 		return p 
 
-	def draw_traj(self, traj_point):
+	def draw_traj(self, traj_point, search_range = 20):
 		x, y = self.to_canvas_xy(traj_point.lon, traj_point.lat)
-		self.canv.create_oval(x-0.1, y-0.1, x+0.1, y+0.1, fill = "red", tag = "traj", state = self.CHECK_BUTTON_STATES[self.var_cb_traj.get()])
+		self.canv.create_oval(x-self.radius, y-self.radius, x+self.radius, y+self.radius, fill = "red", tag = "traj", state = self.CHECK_BUTTON_STATES[self.var_cb_traj.get()])
 		#self.canv.cerate_line()
-
+		r = search_range * self.RESOLUTION * self.scale
+		self.canv.create_oval(x-r, y-r, x+r, y+r, tag = "traj", state = self.CHECK_BUTTON_STATES[self.var_cb_traj.get()])
+		
 	def draw_matching_traj(self, point, roadid, segid):
 		if (roadid, segid) == (-1, -1):
 			return -1
@@ -136,10 +141,11 @@ class MapCanvas(Frame):
 		x2, y2 = self.to_canvas_xy(lon2, lat2)
 		x, y = self.to_canvas_xy(lon, lat)
 		d, ix, iy = DistancePointLine(x, y, x1, y1, x2, y2)
-		self.canv.create_oval(ix-0.1, iy-0.1, ix+0.1, iy+0.1, fill = "yellow", tag = "matching_traj", state = self.CHECK_BUTTON_STATES[self.var_cb_mm.get()])
+		self.canv.create_oval(ix-self.radius, iy-self.radius, ix+self.radius, iy+self.radius, fill = "yellow", tag = "matching_traj", state = self.CHECK_BUTTON_STATES[self.var_cb_mm.get()])
 
 	def onCanvasMotion(self, event): #show the position of mouse on map
 		lon, lat = self.to_lon_lat(self.canv.canvasx(event.x), self.canv.canvasy(event.y))
+		lon, lat = self.canv.canvasx(event.x), self.canv.canvasy(event.y)
 		self.var_pos.set("(%4.4f, %4.4f), scale=%.2f" % (lon, lat, self.scale))
 
 	def onCanvasLeftDoubleClick(self, event):
@@ -151,15 +157,21 @@ class MapCanvas(Frame):
 		self.onCanvasMotion(event) #refresh the footer
 
 	def zoomIn(self, x, y, scale = 1.2):
-		self.scale *= scale
 		cx, cy = self.canv.canvasx(x), self.canv.canvasy(y)
-		self.canv.scale(ALL, cx, cy, scale, scale)
+		self.clon, self.clat = self.to_lon_lat(cx, cy)
+		self.cx, self.cy = cx, cy
+		self.scale *= scale
+		self.radius *= scale
+		self.canv.scale(ALL, self.cx, self.cy, scale, scale)
 		self.canv.config(scrollregion = self.canv.bbox(ALL))
 
 	def zoomOut(self, x, y, scale = 1.2):
-		self.scale /= scale
 		cx, cy = self.canv.canvasx(x), self.canv.canvasy(y)
-		self.canv.scale(ALL, cx, cy, 1.0/scale, 1.0/scale)
+		self.clon, self.clat = self.to_lon_lat(cx, cy)
+		self.cx, self.cy = cx, cy
+		self.scale /= scale
+		self.radius /= scale
+		self.canv.scale(ALL, self.cx, self.cy, 1.0/scale, 1.0/scale)
 		self.canv.config(scrollregion = self.canv.bbox(ALL))
 
 	def onLayerRedraw(self, tag, var):
@@ -181,7 +193,7 @@ if __name__ == "__main__":
 	bjmap.index_roads_on_grid()
 	bjmap.gen_road_graph()
 
-	matching_module = Matching(bjmap)
+	matching_module = Matching(bjmap, 20)
 
 	master = Tk()
 	map_canvas = MapCanvas(bjmap, master)
@@ -193,9 +205,8 @@ if __name__ == "__main__":
 	prev_seg = (-1, -1)
 	prev_candidate = []
 	for i in range(0, len(map_canvas.traj)):
-		print "Drawing NO.%d" % i
 		point = map_canvas.get_point(i)
-		map_canvas.draw_traj(point)
+		map_canvas.draw_traj(point, 20)
 
 		road_id, seg_id, prev_road_id, prev_seg_id, candidate= matching_module.point_matching(point, prev_point, prev_seg, prev_candidate)
 
@@ -207,8 +218,8 @@ if __name__ == "__main__":
 		prev_point = point
 		prev_seg = (road_id, seg_id)
 		prev_candidate = candidate
-
-		for t in range(0, 10):
+		
+		for t in range(0, 5):
 			time.sleep(0.01)
 			master.update()
 

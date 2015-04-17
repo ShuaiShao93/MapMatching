@@ -38,8 +38,6 @@ class Matching(object):
 		print "Number of Candidates:" , len(candidate)		
 
 		road_id, seg_id = self.obtain_matching_segment(traj_point, prev_traj_point, prev_seg, candidate)
-		if (road_id, seg_id) != (-1, -1):
-			print "Matching Successfully!"
 
 		#modify backwards
 		prev_road_id, prev_seg_id = -1, -1
@@ -140,7 +138,7 @@ class Matching(object):
 			tar = (r, s)
 			while prev_seg != tar_prev:
 				tar = tar_prev
-				sp = self.obtain_shortest_path(prev_seg[0], prev_seg[1], r, s)
+				sp = self.obtain_shortest_path(prev_seg[0], prev_seg[1], tar[0], tar[1])
 				tar_prev = sp[0:2]
 				d = sp[2]
 
