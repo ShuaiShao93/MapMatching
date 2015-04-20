@@ -93,6 +93,7 @@ class Matching(object):
 				tp = 1
 			else:
 				tp = self.TopologicalProbability(r, s, traj_point, prev_traj_point, prev_seg)
+				print tp
 			result = op*tp
 
 			if result > 0:
@@ -161,8 +162,10 @@ class Matching(object):
 
 		if dist < w:
 			dist = 2.0 * w - dist
-
-		tp = 1 - abs(w - dist) / dist
+		if dist != 0:
+			tp = 1 - abs(w - dist) / dist
+		else:
+			tp = 1
 
 		return tp
 
@@ -178,6 +181,8 @@ class Matching(object):
 		for (f, r, s) in prev_f_candidate:
 			if (r, s) in sp:
 				return r, s
+
+		return -1, -1
 
 	def obtain_shortest_path(self, r1, s1, r2, s2):
 		sql = "SELECT prev_roadid, prev_segmentid, dist FROM shortest_path WHERE src_roadid = %d AND src_segmentid = %d AND dst_roadid = %d AND dst_segmentid = %d" % (r1, s1, r2, s2)

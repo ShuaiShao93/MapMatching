@@ -195,7 +195,69 @@ class MapCanvas(Frame):
 			self.canv.create_oval(cix - 0.01, ciy - 0.01, cix + 0.01, ciy + 0.01, fill = "yellow")
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	def wg_to_Mars(self, wgLon, wgLat):
+		a = 6378245.0
+		ee = 0.00669342162296594323
 
+		dLat = self.transformLat(wgLon - 105.0, wgLat - 35.0)
+		dLon = self.transformLon(wgLon - 105.0, wgLat - 35.0)
+		radLat = wgLat / 180.0 * math.pi
+		magic = math.sin(radLat)
+		magic = 1 - ee * magic * magic
+		sqrtMagic = math.sqrt(magic)
+		dLat = (dLat * 180.0) / ((a * (1.0 - ee)) / (magic * sqrtMagic) * math.pi)
+		dLon = (dLon * 180.0) / (a / sqrtMagic * math.cos(radLat) * math.pi)
+		mgLat = wgLat + dLat
+		mgLon = wgLon + dLon
+
+		return mgLon, mgLat
+
+	def transformLat(self, x, y):
+		ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * math.sqrt(abs(x))
+		ret += (20.0 * math.sin(6.0 * x * math.pi) + 20.0 * math.sin(2.0 * x * math.pi)) * 2.0 / 3.0
+		ret += (20.0 * math.sin(y * math.pi) + 40.0 * math.sin(y / 3.0 * math.pi)) * 2.0 / 3.0
+		ret += (160.0 * math.sin(y / 12.0 * math.pi) + 320 * math.sin(y * math.pi / 30.0)) * 2.0 / 3.0
+		return ret
+
+	def transformLon(self, x, y):
+		ret = 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * math.sqrt(abs(x))
+		ret += (20.0 * math.sin(6.0 * x * math.pi) + 20.0 * math.sin(2.0 * x * math.pi)) * 2.0 / 3.0
+		ret += (20.0 * math.sin(x * math.pi) + 40.0 * math.sin(x / 3.0 * math.pi)) * 2.0 / 3.0
+		ret += (150.0 * math.sin(x / 12.0 * math.pi) + 300.0 * math.sin(x / 30.0 * math.pi)) * 2.0 / 3.0
+		return ret
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	def Mars_to_bd(self, mg_lon, mg_lat):
+		pi = math.pi
+		x_pi = math.pi * 3000.0 / 180.0
+
+		x = mg_lon
+		y = mg_lat  
+		z = math. sqrt(x * x + y * y) + 0.00002 * math.sin(y * x_pi)
+		theta = math.atan2(y, x) + 0.000003 * math.cos(x * x_pi)
+		bd_lon = z * math.cos(theta) + 0.0065
+		bd_lat = z * math.sin(theta) + 0.006
+
+		return bd_lon, bd_lat
+
+	def bd_to_Mars(self, bd_lon, bd_lat):
+		pi = math.pi
+		x_pi = math.pi * 3000.0 / 180.0
+
+		x = bd_lon - 0.0065
+		y = bd_lat - 0.006
+		z = math.sqrt(x * x + y * y) - 0.00002 * math.sin(y * x_pi)
+		theta = math.atan2(y, x) - 0.000003 * math.cos(x * x_pi)
+		mg_lon = z * math.cos(theta)
+		mg_lat = z * math.sin(theta)
+
+		return mg_lon, mg_lat
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	def wg_to_bd(self, wg_lon, wg_lat):
+		mg_lon, mg_lat = self.wg_to_Mars(wg_lon, wg_lat)
+		bd_lon, bd_lat = self.Mars_to_bd(mg_lon, mg_lat)
+
+		return bd_lon,bd_lat
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 if __name__ == "__main__":
 	bjmap = Map()
 	filenames = ["bjmap_new/road"]
@@ -205,7 +267,7 @@ if __name__ == "__main__":
 	bjmap.index_roads_on_grid()
 	bjmap.gen_road_graph()
 
-	matching_module = Matching(bjmap, 20)
+	matching_module = Matching(bjmap, 50)
 
 	master = Tk()
 	map_canvas = MapCanvas(bjmap, master)
@@ -220,7 +282,8 @@ if __name__ == "__main__":
 	for i in range(0, len(map_canvas.traj)):
 		print "Matching No.", i
 		point = map_canvas.get_point(i)
-		map_canvas.draw_traj(point, 20)
+		#point.lon, point.lat =  map_canvas.wg_to_Mars(point.lon, point.lat)
+		map_canvas.draw_traj(point)
 
 		master.update()
 

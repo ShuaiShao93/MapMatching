@@ -5,12 +5,9 @@ import time
 import psycopg2
 from Utils import map_dist, line_segment_cross
 
-#class TrajectoryPoint(object, timestamp, lon, lat):
-#	self.timestamp, self.lon, self.lat = timestamp, lon, lat
-#	self.row = self.col = -1
 
 class Map(object):
-	def __init__(self, grid_interval=300):
+	def __init__(self, grid_interval=200):
 		self.GRID_INTERVAL = grid_interval
 
 		self.roads = []
@@ -53,6 +50,9 @@ class Map(object):
 		print "max_longitude:", self.max_longitude
 		print "min_latitude:", self.min_latitude
 		print "max_latitude:", self.max_latitude
+
+		print "unit longitude distance:", self.UNIT_LONGITUDE_DISTANCE
+		print "unit latitude distance:", self.UNIT_LATITUDE_DISTANCE
 
 	def lon_lat_to_grid_row_col(self, lon, lat):
 		row = int((self.max_latitude - lat) / self.GRID_INTERVAL_LATITUDE)
@@ -108,7 +108,7 @@ class Map(object):
 		for row in range(0, self.TOTAL_GRID_ROWS):
 			for col in range(0, self.TOTAL_GRID_COLS):
 				self.gen_intersections_in_grid_cell(row, col)
-				print "gen_road_graph: row = %d, col = %d" % (row+1, col+1)
+				#print "gen_road_graph: row = %d, col = %d" % (row+1, col+1)
 
 		print "Number of intersections: ", len(self.intersections)
 
