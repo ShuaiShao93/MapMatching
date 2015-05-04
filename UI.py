@@ -273,21 +273,30 @@ if __name__ == "__main__":
 	map_canvas = MapCanvas(bjmap, master)
 	map_canvas.draw_map()
 
-	map_canvas.load_traj("oneMonthData/oneMonth_967790112421.txt")
+	map_canvas.load_traj("oneMonthData/111.txt")
 	i = 0
 	prev_point = -1
 	prev_seg = (-1, -1)
 	prev_prev_seg = (-1, -1)
 	prev_f_candidate = []
+
+	time_record = [] # record the time consumption for matching
+
 	for i in range(0, len(map_canvas.traj)):
-		print "Matching No.", i
+		print "Matching No.", i + 1
 		point = map_canvas.get_point(i)
 		#point.lon, point.lat =  map_canvas.wg_to_Mars(point.lon, point.lat)
 		map_canvas.draw_traj(point)
 
 		master.update()
 
+		t1 = time.time()
 		road_id, seg_id, prev_road_id, prev_seg_id, f_candidate = matching_module.point_matching(point, prev_point, prev_seg, prev_f_candidate, prev_prev_seg)
+		t2 = time.time()
+		t = t2 - t1
+		print "No. %d Matching spends %f seconds" % (i + 1, t)
+		time_record.append(t)
+		print "The average time for mapmatching is", sum(time_record) * 1.0 / len(time_record)	
 
 		map_canvas.draw_matching_traj(point, road_id, seg_id)
 
@@ -299,8 +308,10 @@ if __name__ == "__main__":
 		prev_prev_seg = prev_seg
 		prev_seg = (road_id, seg_id)
 		prev_f_candidate = f_candidate
-		
-		master.update()
+	
+		for i in range(100):
+			time.sleep(0.01)
+			master.update()
 
 
 	#map_canvas.highlight_intersections()

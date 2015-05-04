@@ -10,7 +10,7 @@ class TrajPoint(object):
 		self.row = self.col = -1
 
 class Matching(object):
-	def __init__ (self, traj_map, search_range = 50):
+	def __init__ (self, traj_map, search_range = 100):
 		self.traj_map = traj_map
 		self.search_range = search_range
 
@@ -26,6 +26,8 @@ class Matching(object):
 		print "Connected!"
 		self.cursor_sp = self.conn_sp.cursor()
 
+		self.shortest_path = {}
+
 	def __del__ (self):
 		self.conn_sp.commit()
 		self.conn_sp.close()
@@ -33,19 +35,29 @@ class Matching(object):
 	def point_matching(self, traj_point, prev_traj_point, prev_seg, prev_f_candidate, prev_prev_seg):
 		print "MapMatching at Time:", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(traj_point.timestamp))
 
+		#t1 = time.time()
+
 		candidate = self.obtain_candidate(traj_point)
 
-		print "Number of Candidates:" , len(candidate)		
+		#t2 = time.time()
+		#print "Obtain_Candidate spends %f s" % (t2-t1)
+		#print "Number of Candidates:" , len(candidate)		
 
 		f_candidate = self.obtain_matching_segment(traj_point, prev_traj_point, prev_seg, candidate)
 		road_id = f_candidate[0][1]
 		seg_id = f_candidate[0][2]
+
+		#t3 = time.time()
+		#print "Obtain_matching_segment spends %f s" % (t3-t2)
 
 		#modify backwards
 		mod_road_id, mod_seg_id = -1, -1
 		if prev_seg != (-1, -1) and prev_prev_seg != (-1, -1) and (road_id, seg_id) != (-1, -1): #if it is the first and second point or there is no matching result for current point, no need to modify backwards
 			cur_seg = (road_id, seg_id)
 			mod_road_id, mod_seg_id = self.modify_backwards(cur_seg, prev_f_candidate, prev_prev_seg)
+
+		#t4 = time.time()	
+		#print "Modify Backwards spends %f s" % (t4-t3)
 
 		if (mod_road_id, mod_seg_id) == (-1, -1):
 			return road_id, seg_id, prev_seg[0], prev_seg[1], f_candidate
@@ -82,6 +94,9 @@ class Matching(object):
 						break
 				if flag == False:
 					candidate.append((dist, r, s))
+		
+		if len(candidate) > 5:  #5 candidates at most
+			candidate = candidate[:5]
 
 		return candidate
 
@@ -93,7 +108,6 @@ class Matching(object):
 				tp = 1
 			else:
 				tp = self.TopologicalProbability(r, s, traj_point, prev_traj_point, prev_seg)
-				print tp
 			result = op*tp
 
 			if result > 0:
@@ -176,6 +190,8 @@ class Matching(object):
 		tar = cur_seg
 		while tar != prev_prev_seg:
 			tar = self.obtain_shortest_path(prev_prev_seg[0], prev_prev_seg[1], tar[0], tar[1])[:2]
+			if tar == (-1, -1):
+				return -1, -1
 			sp.append(tar)
 		
 		for (f, r, s) in prev_f_candidate:
@@ -185,16 +201,30 @@ class Matching(object):
 		return -1, -1
 
 	def obtain_shortest_path(self, r1, s1, r2, s2):
-		sql = "SELECT prev_roadid, prev_segmentid, dist FROM shortest_path WHERE src_roadid = %d AND src_segmentid = %d AND dst_roadid = %d AND dst_segmentid = %d" % (r1, s1, r2, s2)
-		self.cursor_sp.execute(sql)
-		result = self.cursor_sp.fetchall()
+		if not self.shortest_path.has_key(r1): #move the sp information of src_road to memory from disk
+			self.shortest_path[r1] = {}
 
-		if len(result) == 0:
-			#print "Failed to obtain shortest path!"
-			return -1, -1, -1
+			sql = "SELECT src_segmentid, dst_roadid, dst_segmentid, prev_roadid, prev_segmentid, dist FROM shortest_path WHERE src_roadid = %d" % (r1) 
+		#sql = "SELECT prev_roadid, prev_segmentid, dist FROM shortest_path WHERE src_roadid = %d AND src_segmentid = %d AND dst_roadid = %d AND dst_segmentid = %d" % (r1, s1, r2, s2)
+			self.cursor_sp.execute(sql)
+			result = self.cursor_sp.fetchall()
 
-		return result[0]
-		
+			if len(result) == 0:
+				#print "Failed to obtain shortest path!"
+				return -1, -1, -1
+
+			for (src_segmentid, dst_roadid, dst_segmentid, prev_roadid, prev_segmentid, dist) in result:
+				if not self.shortest_path[r1].has_key(src_segmentid):
+					self.shortest_path[r1][src_segmentid] = []
+				self.shortest_path[r1][src_segmentid].append((dst_roadid, dst_segmentid, prev_roadid, prev_segmentid, dist))
+
+		if self.shortest_path[r1].has_key(s1):	
+			for (d_r, d_s, p_r, p_s, dst) in self.shortest_path[r1][s1]:
+				if d_r == r2 and d_s == s2:
+					return p_r, p_s, dst
+
+		return -1, -1, -1
+
 
 	def find_intersection(self, r1, s1, r2, s2):
 		if r1 == r2 and abs(s1-s2) == 1:
