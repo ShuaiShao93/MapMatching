@@ -267,7 +267,7 @@ if __name__ == "__main__":
 	bjmap.index_roads_on_grid()
 	bjmap.gen_road_graph()
 
-	matching_module = Matching(bjmap, 50)
+	matching_module = Matching(bjmap, 100)
 
 	master = Tk()
 	map_canvas = MapCanvas(bjmap, master)
@@ -302,7 +302,8 @@ if __name__ == "__main__":
 
 		if (prev_road_id, prev_seg_id) != prev_seg and (prev_road_id, prev_seg_id) != (-1, -1):
 			map_canvas.replace_matching_traj(prev_point, prev_seg)
-			map_canvas.draw_matching_traj(prev_point, prev_road_id, prev_seg_id)	
+			map_canvas.draw_matching_traj(prev_point, prev_road_id, prev_seg_id)
+			prev_seg = (prev_road_id, prev_seg_id) #for the next point's Modify Backwards	
 
 		prev_point = point
 		prev_prev_seg = prev_seg

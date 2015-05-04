@@ -184,16 +184,13 @@ class Matching(object):
 		return tp
 
 	def modify_backwards(self, cur_seg, prev_f_candidate, prev_prev_seg):
-		if cur_seg == prev_prev_seg:
-			return -1, -1
 		sp = [cur_seg]
 		tar = cur_seg
 		while tar != prev_prev_seg:
 			tar = self.obtain_shortest_path(prev_prev_seg[0], prev_prev_seg[1], tar[0], tar[1])[:2]
 			if tar == (-1, -1):
 				return -1, -1
-			sp.append(tar)
-		
+			sp.append(tar)	
 		for (f, r, s) in prev_f_candidate:
 			if (r, s) in sp:
 				return r, s
