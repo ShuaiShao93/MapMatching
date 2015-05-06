@@ -3,6 +3,7 @@ from Utils import DistancePointLine, lineMagnitude
 import psycopg2
 import time
 import math
+import os
 
 class TrajPoint(object):
 	def __init__(self, timestamp, lon, lat, spd):
@@ -171,8 +172,14 @@ class Matching(object):
 			w = w0 + lineMagnitude(prev_ix, prev_iy, latter_intersection_x, latter_intersection_y) + lineMagnitude(prev_intersection_x, prev_intersection_y, cur_ix, cur_iy) #obtain the length of shortest path
 
 		avg_spd = (prev_traj_point.spd + traj_point.spd) / 2.0 * 1000 
-		t = (traj_point.timestamp - prev_traj_point.timestamp) / 60.0 / 60.0
-		dist = avg_spd * t #the actual distance of vehicle moving
+		t = traj_point.timestamp - prev_traj_point.timestamp
+		if t >= 10.0:  #if vehicle didn't move, GPS won't send data, so we have to consider the driving time as 5 seconds
+			t = 5.0
+			avg_spd /= 2.0
+
+		t = t / 60.0 / 60.0
+
+		dist = avg_spd * t
 
 		if dist < w:
 			dist = 2.0 * w - dist

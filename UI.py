@@ -294,9 +294,9 @@ if __name__ == "__main__":
 		road_id, seg_id, prev_road_id, prev_seg_id, f_candidate = matching_module.point_matching(point, prev_point, prev_seg, prev_f_candidate, prev_prev_seg)
 		t2 = time.time()
 		t = t2 - t1
-		print "No. %d Matching spends %f seconds" % (i + 1, t)
+		#print "No. %d Matching spends %f seconds" % (i + 1, t)
 		time_record.append(t)
-		print "The average time for mapmatching is", sum(time_record) * 1.0 / len(time_record)	
+		#print "The average time for mapmatching is", sum(time_record) * 1.0 / len(time_record)	
 
 		map_canvas.draw_matching_traj(point, road_id, seg_id)
 
