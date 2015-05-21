@@ -28,12 +28,22 @@ class Matching(object):
 		self.cursor_sp = self.conn_sp.cursor()
 
 		self.shortest_path = {}
+		self.initialize_sp()
+
+		self.supp = {}
 
 	def __del__ (self):
 		self.conn_sp.commit()
 		self.conn_sp.close()
 
-	def point_matching(self, traj_point, prev_traj_point, prev_seg, prev_f_candidate, prev_prev_seg):
+	def point_matching(self, traj_point, traj_file):
+		if not self.supp.has_key(traj_file):
+			self.supp[traj_file] = {}
+			self.supp[traj_file]["prev_traj_point"] = -1
+			self.supp[traj_file]["prev_seg"] = (-1, -1)
+			self.supp[traj_file]["prev_f_candidate"] = []
+			self.supp[traj_file]["prev_prev_seg"] = (-1, -1)
+			
 		print "MapMatching at Time:", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(traj_point.timestamp))
 
 		#t1 = time.time()
@@ -44,7 +54,7 @@ class Matching(object):
 		#print "Obtain_Candidate spends %f s" % (t2-t1)
 		#print "Number of Candidates:" , len(candidate)		
 
-		f_candidate = self.obtain_matching_segment(traj_point, prev_traj_point, prev_seg, candidate)
+		f_candidate = self.obtain_matching_segment(traj_point, self.supp[traj_file]["prev_traj_point"], self.supp[traj_file]["prev_seg"], candidate)
 		road_id = f_candidate[0][1]
 		seg_id = f_candidate[0][2]
 
@@ -53,17 +63,23 @@ class Matching(object):
 
 		#modify backwards
 		mod_road_id, mod_seg_id = -1, -1
-		if prev_seg != (-1, -1) and prev_prev_seg != (-1, -1) and (road_id, seg_id) != (-1, -1): #if it is the first and second point or there is no matching result for current point, no need to modify backwards
+		if self.supp[traj_file]["prev_seg"] != (-1, -1) and self.supp[traj_file]["prev_prev_seg"] != (-1, -1) and (road_id, seg_id) != (-1, -1): #if it is the first and second point or there is no matching result for current point, no need to modify backwards
 			cur_seg = (road_id, seg_id)
-			mod_road_id, mod_seg_id = self.modify_backwards(cur_seg, prev_f_candidate, prev_prev_seg)
+			mod_road_id, mod_seg_id = self.modify_backwards(cur_seg, self.supp[traj_file]["prev_f_candidate"], self.supp[traj_file]["prev_prev_seg"])
 
 		#t4 = time.time()	
 		#print "Modify Backwards spends %f s" % (t4-t3)
 
-		if (mod_road_id, mod_seg_id) == (-1, -1):
-			return road_id, seg_id, prev_seg[0], prev_seg[1], f_candidate
+		self.supp[traj_file]["prev_traj_point"] = traj_point
+		self.supp[traj_file]["prev_f_candidate"] = f_candidate
+		if (mod_road_id, mod_seg_id) == (-1, -1) or (mod_road_id, mod_seg_id) == self.supp[traj_file]["prev_seg"]:
+			self.supp[traj_file]["prev_prev_seg"] = self.supp[traj_file]["prev_seg"]
+			self.supp[traj_file]["prev_seg"] = (road_id, seg_id)
+			return road_id, seg_id, -1, -1
 		else:	
-			return road_id, seg_id, mod_road_id, mod_seg_id, f_candidate
+			self.supp[traj_file]["prev_prev_seg"] = (mod_road_id, mod_seg_id)
+			self.supp[traj_file]["prev_seg"] = (road_id, seg_id)
+			return road_id, seg_id, mod_road_id, mod_seg_id
 
 	def obtain_candidate(self, traj_point):
 		traj_point.row, traj_point.col = self.traj_map.lon_lat_to_grid_row_col(traj_point.lon, traj_point.lat)
@@ -209,7 +225,6 @@ class Matching(object):
 			self.shortest_path[r1] = {}
 
 			sql = "SELECT src_segmentid, dst_roadid, dst_segmentid, prev_roadid, prev_segmentid, dist FROM shortest_path WHERE src_roadid = %d" % (r1) 
-		#sql = "SELECT prev_roadid, prev_segmentid, dist FROM shortest_path WHERE src_roadid = %d AND src_segmentid = %d AND dst_roadid = %d AND dst_segmentid = %d" % (r1, s1, r2, s2)
 			self.cursor_sp.execute(sql)
 			result = self.cursor_sp.fetchall()
 
@@ -229,6 +244,25 @@ class Matching(object):
 
 		return -1, -1, -1
 
+	def initialize_sp(self):
+		print "Initializing Shortest Path List......"
+		sql = "SELECT src_roadid, src_segmentid, dst_roadid, dst_segmentid, prev_roadid, prev_segmentid, dist FROM shortest_path"
+		self.cursor_sp.execute(sql)
+		result = self.cursor_sp.fetchall()
+		print len(result)
+
+		if len(result) == 0:
+			#print "Failed to initialize shortest path!"
+			return -1, -1, -1
+
+		for (src_roadid, src_segmentid, dst_roadid, dst_segmentid, prev_roadid, prev_segmentid, dist) in result:
+			if not self.shortest_path.has_key(src_roadid):
+				self.shortest_path[src_roadid] = {}
+			if not self.shortest_path[src_roadid].has_key(src_segmentid):
+				self.shortest_path[src_roadid][src_segmentid] = []
+			self.shortest_path[src_roadid][src_segmentid].append((dst_roadid, dst_segmentid, prev_roadid, prev_segmentid, dist))
+
+		print "Shortest Path Initializing Succeed!"
 
 	def find_intersection(self, r1, s1, r2, s2):
 		if r1 == r2 and abs(s1-s2) == 1:
