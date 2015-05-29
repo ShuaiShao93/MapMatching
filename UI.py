@@ -123,7 +123,7 @@ class MapCanvas(Frame):
 		cb_mm.pack()
 
 	def get_point(self, i, filename):
-		p = TrajPoint(self.traj[filename][i]["timestamp"], self.traj[filename][i]["longitude"], self.traj[filename][i]["latitude"], self.traj[filename][i]["speed"])
+		p = TrajPoint(self.traj[filename][i]["devicesn"],self.traj[filename][i]["timestamp"], self.traj[filename][i]["longitude"], self.traj[filename][i]["latitude"], self.traj[filename][i]["speed"])
 		
 		return p 
 
@@ -294,7 +294,7 @@ if __name__ == "__main__":
 			master.update()
 
 			t1 = time.time()
-			road_id, seg_id, prev_road_id, prev_seg_id = matching_module.point_matching(point, f)
+			road_id, seg_id, prev_road_id, prev_seg_id = matching_module.point_matching(point)
 			t2 = time.time()
 			t = t2 - t1
 			#print "No. %d Matching spends %f seconds" % (i + 1, t)

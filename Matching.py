@@ -6,8 +6,8 @@ import math
 import os
 
 class TrajPoint(object):
-	def __init__(self, timestamp, lon, lat, spd):
-		self.timestamp, self.lon, self.lat, self.spd= timestamp, lon, lat, spd
+	def __init__(self, devicesn, timestamp, lon, lat, spd):
+		self.devicesn, self.timestamp, self.lon, self.lat, self.spd= devicesn, timestamp, lon, lat, spd
 		self.row = self.col = -1
 
 class Matching(object):
@@ -36,17 +36,19 @@ class Matching(object):
 		self.conn_sp.commit()
 		self.conn_sp.close()
 
-	def point_matching(self, traj_point, traj_file):
-		if not self.supp.has_key(traj_file):
-			self.supp[traj_file] = {}
-			self.supp[traj_file]["prev_traj_point"] = -1
-			self.supp[traj_file]["prev_seg"] = (-1, -1)
-			self.supp[traj_file]["prev_f_candidate"] = []
-			self.supp[traj_file]["prev_prev_seg"] = (-1, -1)
+	def point_matching(self, traj_point):
+		if not self.supp.has_key(traj_point.devicesn):
+			dsn = traj_point.devicesn
+			self.supp[dsn] = {}
+			self.supp[dsn]["prev_traj_point"] = -1
+			self.supp[dsn]["prev_seg"] = (-1, -1)
+			self.supp[dsn]["prev_f_candidate"] = []
+			self.supp[dsn]["prev_prev_seg"] = (-1, -1)
 			
 		print "MapMatching at Time:", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(traj_point.timestamp))
 
 		#t1 = time.time()
+		dsn = traj_point.devicesn
 
 		candidate = self.obtain_candidate(traj_point)
 
@@ -54,7 +56,7 @@ class Matching(object):
 		#print "Obtain_Candidate spends %f s" % (t2-t1)
 		#print "Number of Candidates:" , len(candidate)		
 
-		f_candidate = self.obtain_matching_segment(traj_point, self.supp[traj_file]["prev_traj_point"], self.supp[traj_file]["prev_seg"], candidate)
+		f_candidate = self.obtain_matching_segment(traj_point, self.supp[dsn]["prev_traj_point"], self.supp[dsn]["prev_seg"], candidate)
 		road_id = f_candidate[0][1]
 		seg_id = f_candidate[0][2]
 
@@ -63,22 +65,22 @@ class Matching(object):
 
 		#modify backwards
 		mod_road_id, mod_seg_id = -1, -1
-		if self.supp[traj_file]["prev_seg"] != (-1, -1) and self.supp[traj_file]["prev_prev_seg"] != (-1, -1) and (road_id, seg_id) != (-1, -1): #if it is the first and second point or there is no matching result for current point, no need to modify backwards
+		if self.supp[dsn]["prev_seg"] != (-1, -1) and self.supp[dsn]["prev_prev_seg"] != (-1, -1) and (road_id, seg_id) != (-1, -1): #if it is the first and second point or there is no matching result for current point, no need to modify backwards
 			cur_seg = (road_id, seg_id)
-			mod_road_id, mod_seg_id = self.modify_backwards(cur_seg, self.supp[traj_file]["prev_f_candidate"], self.supp[traj_file]["prev_prev_seg"])
+			mod_road_id, mod_seg_id = self.modify_backwards(cur_seg, self.supp[dsn]["prev_f_candidate"], self.supp[dsn]["prev_prev_seg"])
 
 		#t4 = time.time()	
 		#print "Modify Backwards spends %f s" % (t4-t3)
 
-		self.supp[traj_file]["prev_traj_point"] = traj_point
-		self.supp[traj_file]["prev_f_candidate"] = f_candidate
-		if (mod_road_id, mod_seg_id) == (-1, -1) or (mod_road_id, mod_seg_id) == self.supp[traj_file]["prev_seg"]:
-			self.supp[traj_file]["prev_prev_seg"] = self.supp[traj_file]["prev_seg"]
-			self.supp[traj_file]["prev_seg"] = (road_id, seg_id)
+		self.supp[dsn]["prev_traj_point"] = traj_point
+		self.supp[dsn]["prev_f_candidate"] = f_candidate
+		if (mod_road_id, mod_seg_id) == (-1, -1) or (mod_road_id, mod_seg_id) == self.supp[dsn]["prev_seg"]:
+			self.supp[dsn]["prev_prev_seg"] = self.supp[dsn]["prev_seg"]
+			self.supp[dsn]["prev_seg"] = (road_id, seg_id)
 			return road_id, seg_id, -1, -1
 		else:	
-			self.supp[traj_file]["prev_prev_seg"] = (mod_road_id, mod_seg_id)
-			self.supp[traj_file]["prev_seg"] = (road_id, seg_id)
+			self.supp[dsn]["prev_prev_seg"] = (mod_road_id, mod_seg_id)
+			self.supp[dsn]["prev_seg"] = (road_id, seg_id)
 			return road_id, seg_id, mod_road_id, mod_seg_id
 
 	def obtain_candidate(self, traj_point):
